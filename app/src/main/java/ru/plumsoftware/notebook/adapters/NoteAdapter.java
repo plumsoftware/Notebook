@@ -6,6 +6,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.database.sqlite.SQLiteDatabase;
+import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.view.LayoutInflater;
@@ -102,7 +103,8 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteViewHolder> {
         });
 
         //Ads
-        if (position == 2 || position == 5 || position == 8 || position == 11 || position == 14) {
+        if (position == 2 || position == 8 || position == 15 || position == 20) {
+//        if (position == -1) {
 
             holder.adsCard.setVisibility(View.GONE);
 
@@ -224,6 +226,8 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteViewHolder> {
                 Intent intent = new Intent(activity, AddNoteActivity.class);
                 intent.putExtra("update", true);
                 intent.putExtra("note", note);
+                intent.putExtra("LoadInterstitialAd", true);
+                intent.putExtra("isLoadAppOpenAd", false);
                 activity.startActivity(intent);
                 activity.overridePendingTransition(0, 0);
                 activity.finish();
@@ -411,7 +415,9 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteViewHolder> {
             @Override
             public boolean onLongClick(View view) {
                 Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE));
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE));
+                }
                 if (note.getIsPinned() == 0)
                     showPopupMenu(view, note.getAddNoteTime(), note);
                 else if (note.getIsPinned() == 1)
@@ -454,6 +460,8 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteViewHolder> {
                                 contentValues.put(DatabaseConstants._NOTE_COLOR, note.getColor());
                                 contentValues.put(DatabaseConstants._IS_LIKED, 0);
                                 contentValues.put(DatabaseConstants._IS_PINNED, 1);
+                                contentValues.put(DatabaseConstants._IS_NOTIFY, note.getIsNotify());
+                                contentValues.put(DatabaseConstants._CHANNEL_ID, note.getNotificationChannelId());
                                 contentValues.put(DatabaseConstants._ADD_NOTE_TIME, note.getAddNoteTime());
                                 sqLiteDatabaseNotes.update(DatabaseConstants._NOTES_TABLE_NAME, contentValues, DatabaseConstants._ADD_NOTE_TIME + " = ?", new String[]{Long.toString(addTime)});
 //                                NotepadActivity.reloadRecyclerView(context, activity);
@@ -506,6 +514,8 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteViewHolder> {
                                 contentValues.put(DatabaseConstants._NOTE_COLOR, note.getColor());
                                 contentValues.put(DatabaseConstants._IS_LIKED, 0);
                                 contentValues.put(DatabaseConstants._IS_PINNED, 0);
+                                contentValues.put(DatabaseConstants._IS_NOTIFY, note.getIsNotify());
+                                contentValues.put(DatabaseConstants._CHANNEL_ID, note.getNotificationChannelId());
                                 contentValues.put(DatabaseConstants._ADD_NOTE_TIME, note.getAddNoteTime());
                                 sqLiteDatabaseNotes.update(DatabaseConstants._NOTES_TABLE_NAME, contentValues, DatabaseConstants._ADD_NOTE_TIME + " = ?", new String[]{Long.toString(addTime)});
 //                                NotepadActivity.reloadRecyclerView(context, activity);

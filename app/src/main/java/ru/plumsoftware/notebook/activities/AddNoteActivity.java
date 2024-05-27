@@ -4,20 +4,26 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
+import androidx.core.app.ActivityCompat;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
-import android.text.format.DateUtils;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.CheckBox;
 import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.GridView;
@@ -29,7 +35,6 @@ import android.widget.Toast;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.snackbar.Snackbar;
 import com.yandex.mobile.ads.common.AdError;
-import com.yandex.mobile.ads.common.AdRequest;
 import com.yandex.mobile.ads.common.AdRequestConfiguration;
 import com.yandex.mobile.ads.common.AdRequestError;
 import com.yandex.mobile.ads.common.ImpressionData;
@@ -58,13 +63,20 @@ import ru.plumsoftware.notebook.data.items.Note;
 import ru.plumsoftware.notebook.data.items.Shape;
 import ru.plumsoftware.notebook.databases.DatabaseConstants;
 import ru.plumsoftware.notebook.databases.SQLiteDatabaseManager;
+import ru.plumsoftware.notebook.services.NotificationScheduler;
+import ru.plumsoftware.notebook.utilities.UniqueIdGenerator;
 
 public class AddNoteActivity extends AppCompatActivity {
 
+    private int REQUEST_CODE = 100;
+    private String notificationChannelId = "";
+
     private int
-            color = 0xFFFFFF,
+            color,
             opacityRes = R.drawable.ic_coffee;
     private long noteTime = 0L;
+
+    private boolean isLoadIntAds = true;
     private CardView cardViewBtnDone;
     private SQLiteDatabase sqLiteDatabaseNotes;
     @Nullable
@@ -85,12 +97,15 @@ public class AddNoteActivity extends AppCompatActivity {
 
         });
 
+        color = getResources().getColor(R.color.note_green);
+
         toolbar = (androidx.appcompat.widget.Toolbar) findViewById(R.id.toolbar);
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         Objects.requireNonNull(getSupportActionBar()).setDisplayHomeAsUpEnabled(true);
         EditText tvTitle = (EditText) findViewById(R.id.Title);
         EditText tvText = (EditText) findViewById(R.id.Text);
+        CheckBox checkBox = (CheckBox) findViewById(R.id.checkBox);
         cardViewBtnDone = (CardView) findViewById(R.id.cardBtnDoneUltra);
         TextView textView5 = (TextView) findViewById(R.id.textView5);
         SQLiteDatabaseManager sqLiteDatabaseManager = new SQLiteDatabaseManager(this);
@@ -101,13 +116,27 @@ public class AddNoteActivity extends AppCompatActivity {
         Note note = getIntent().getParcelableExtra("note");
         boolean isUpdate = getIntent().getBooleanExtra("update", false);
 
+        Intent intent = new Intent(AddNoteActivity.this, MainActivity.class);
+        if (!getIntent().getBooleanExtra("isLoadAppOpenAd", false)) {
+            intent.putExtra("isLoadAppOpenAd", false);
+        }
+        isLoadIntAds = getIntent().getBooleanExtra("LoadInterstitialAd", true);
+        if (isLoadIntAds) {
+            intent.putExtra("LoadInterstitialAd", false);
+        }
+
         if (isUpdate) {
             toolbar.setTitle("Редактировать заметку");
             toolbar.setSubtitle(new SimpleDateFormat("dd.MM.yyyy HH.mm", Locale.getDefault()).format(new Date(note.getAddNoteTime())));
 
+            Log.d("TAG", note.toString());
+
 //            Setup note data
             color = note.getColor();
             opacityRes = note.getOpacity();
+            notificationChannelId = note.getNotificationChannelId();
+            boolean i_n = note.getIsNotify() == 1;
+            checkBox.setChecked(i_n);
 
             cardViewBtnDone.setCardBackgroundColor(color);
             tvTitle.setText(note.getNoteName());
@@ -118,57 +147,58 @@ public class AddNoteActivity extends AppCompatActivity {
             toolbar.setSubtitle(new SimpleDateFormat("dd.MM.yyyy HH.mm", Locale.getDefault()).format(new Date(noteTime)));
         }
 
-        mInterstitialAdLoader = new InterstitialAdLoader(this);
+        if (isLoadIntAds) {
+            mInterstitialAdLoader = new InterstitialAdLoader(this);
 
-        mInterstitialAdLoader.setAdLoadListener(new InterstitialAdLoadListener() {
-            @Override
-            public void onAdLoaded(@NonNull final InterstitialAd interstitialAd) {
-                mInterstitialAd = interstitialAd;
-                progressDialog.dismiss();
-                if (mInterstitialAd != null) {
-                    mInterstitialAd.setAdEventListener(new InterstitialAdEventListener() {
-                        @Override
-                        public void onAdShown() {
+            mInterstitialAdLoader.setAdLoadListener(new InterstitialAdLoadListener() {
+                @Override
+                public void onAdLoaded(@NonNull final InterstitialAd interstitialAd) {
+                    mInterstitialAd = interstitialAd;
+                    progressDialog.dismiss();
+                    if (mInterstitialAd != null) {
+                        mInterstitialAd.setAdEventListener(new InterstitialAdEventListener() {
+                            @Override
+                            public void onAdShown() {
 
-                        }
+                            }
 
-                        @Override
-                        public void onAdFailedToShow(@NonNull AdError adError) {
+                            @Override
+                            public void onAdFailedToShow(@NonNull AdError adError) {
 
-                        }
+                            }
 
-                        @Override
-                        public void onAdDismissed() {
-                            startActivity(new Intent(AddNoteActivity.this, MainActivity.class));
-                            overridePendingTransition(0, 0);
-                            finish();
-                        }
+                            @Override
+                            public void onAdDismissed() {
+                                startActivity(intent);
+                                overridePendingTransition(0, 0);
+                                finish();
+                            }
 
-                        @Override
-                        public void onAdClicked() {
-                            startActivity(new Intent(AddNoteActivity.this, MainActivity.class));
-                            overridePendingTransition(0, 0);
-                            finish();
-                        }
+                            @Override
+                            public void onAdClicked() {
+                                startActivity(intent);
+                                overridePendingTransition(0, 0);
+                                finish();
+                            }
 
-                        @Override
-                        public void onAdImpression(@Nullable ImpressionData impressionData) {
+                            @Override
+                            public void onAdImpression(@Nullable ImpressionData impressionData) {
 
-                        }
-                    });
+                            }
+                        });
+                    }
+                    mInterstitialAd.show(AddNoteActivity.this);
                 }
-                mInterstitialAd.show(AddNoteActivity.this);
-            }
 
-            @Override
-            public void onAdFailedToLoad(@NonNull final AdRequestError adRequestError) {
-                Toast.makeText(AddNoteActivity.this, adRequestError.getDescription(), Toast.LENGTH_SHORT).show();
-                startActivity(new Intent(AddNoteActivity.this, MainActivity.class));
-                overridePendingTransition(0, 0);
-                finish();
-            }
-        });
-
+                @Override
+                public void onAdFailedToLoad(@NonNull final AdRequestError adRequestError) {
+                    Toast.makeText(AddNoteActivity.this, adRequestError.getDescription(), Toast.LENGTH_SHORT).show();
+                    startActivity(intent);
+                    overridePendingTransition(0, 0);
+                    finish();
+                }
+            });
+        }
 //        interstitialAd.setAdUnitId("R-M-1957919-2");
 
         cardViewBtnDone.setOnClickListener(new View.OnClickListener() {
@@ -184,13 +214,27 @@ public class AddNoteActivity extends AppCompatActivity {
                     note.setColor(color);
                     note.setOpacity(opacityRes);
                     note.setAddNoteTime(noteTime);
+                    note.setIsNotify(checkBox.isChecked() ? 1 : 0);
+                    note.setNotificationChannelId(notificationChannelId);
+//                    note.setNotificationChannelId(UniqueIdGenerator.generateUniqueId_2());
                     updateNote(note);
 //                    deleteNote(noteTime);
 //                    saveNote(noteTitle, text, opacityRes, color, noteTime);
                     onBackPressed();
                 } else {
-                    saveNote(noteTitle, text, opacityRes, color, noteTime);
+                    saveNote(noteTitle, text, opacityRes, color, noteTime, checkBox.isChecked());
                     onBackPressed();
+                }
+
+                if (checkBox.isChecked()) {
+                    if (!notificationChannelId.isEmpty()) {
+                        setAlarmManager(noteTime, noteTitle, color, notificationChannelId);
+                        Log.d("TAG", notificationChannelId);
+                    } else {
+                        notificationChannelId = UniqueIdGenerator.generateUniqueId();
+                        Log.d("TAG", notificationChannelId);
+                        setAlarmManager(noteTime, noteTitle, color, notificationChannelId);
+                    }
                 }
 
                 List<Group> groupList = GroupAdapter.addedGroups;
@@ -212,13 +256,50 @@ public class AddNoteActivity extends AppCompatActivity {
                 }
             }
         });
+
+        checkBox.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (ActivityCompat.checkSelfPermission(AddNoteActivity.this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        ActivityCompat.requestPermissions((Activity) AddNoteActivity.this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_CODE);
+                    }
+                }
+            }
+        });
     }
 
-    public void saveNote(String name, String text, int or, int c, long time) {
+    public void saveNote(String name, String text, int or, int c, long time, boolean isNotify) {
         if (name == null || name.isEmpty())
             name = "";
         if (text == null || text.isEmpty())
             text = "";
+
+        String notificationChannelId = UniqueIdGenerator.generateUniqueId();
+
+        int isNotifyInt;
+        if (isNotify) {
+            isNotifyInt = 1;
+        } else {
+            isNotifyInt = 0;
+        }
+
+        Note note = new Note(
+                0,
+                0,
+                or,
+                0,
+                0,
+                c,
+                name,
+                text,
+                time,
+                0,
+                notificationChannelId,
+                isNotifyInt
+        );
+
+        Log.d("TAG", note.toString());
 
         ContentValues contentValues = new ContentValues();
         contentValues.put(DatabaseConstants._NOTE_NAME, name);
@@ -228,6 +309,8 @@ public class AddNoteActivity extends AppCompatActivity {
         contentValues.put(DatabaseConstants._IS_LIKED, 0);
         contentValues.put(DatabaseConstants._IS_PINNED, 0);
         contentValues.put(DatabaseConstants._ADD_NOTE_TIME, time);
+        contentValues.put(DatabaseConstants._IS_NOTIFY, isNotifyInt);
+        contentValues.put(DatabaseConstants._CHANNEL_ID, notificationChannelId);
         sqLiteDatabaseNotes.insert(DatabaseConstants._NOTES_TABLE_NAME, null, contentValues);
 
         Snackbar
@@ -246,6 +329,8 @@ public class AddNoteActivity extends AppCompatActivity {
         contentValues.put(DatabaseConstants._IS_LIKED, note.getIsLiked());
         contentValues.put(DatabaseConstants._IS_PINNED, note.getIsPinned());
         contentValues.put(DatabaseConstants._ADD_NOTE_TIME, note.getAddNoteTime());
+        contentValues.put(DatabaseConstants._IS_NOTIFY, note.getIsNotify());
+        contentValues.put(DatabaseConstants._CHANNEL_ID, note.getNotificationChannelId());
         sqLiteDatabaseNotes.update(DatabaseConstants._NOTES_TABLE_NAME, contentValues, DatabaseConstants._ID + " = ?", new String[]{String.valueOf(note.getId())});
     }
 
@@ -348,12 +433,29 @@ public class AddNoteActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        Intent intent = new Intent(AddNoteActivity.this, MainActivity.class);
+        if (!getIntent().getBooleanExtra("isLoadAppOpenAd", false)) {
+            intent.putExtra("isLoadAppOpenAd", false);
+        }
+        if (isLoadIntAds) {
+            intent.putExtra("LoadInterstitialAd", false);
+        }
 //        super.onBackPressed();
-        progressDialog.showDialog();
-        if (mInterstitialAdLoader != null) {
-            final AdRequestConfiguration adRequestConfiguration =
-                    new AdRequestConfiguration.Builder("R-M-1957919-2").build();
-            mInterstitialAdLoader.loadAd(adRequestConfiguration);
+        if (isLoadIntAds)
+            if (mInterstitialAdLoader != null) {
+                progressDialog.showDialog();
+                final AdRequestConfiguration adRequestConfiguration =
+                        new AdRequestConfiguration.Builder("R-M-1957919-2").build();
+                mInterstitialAdLoader.loadAd(adRequestConfiguration);
+            } else {
+                startActivity(intent);
+                overridePendingTransition(0, 0);
+                finish();
+            }
+        else {
+            startActivity(intent);
+            overridePendingTransition(0, 0);
+            finish();
         }
     }
 
@@ -385,4 +487,15 @@ public class AddNoteActivity extends AppCompatActivity {
                     .show();
         }
     };
+
+    //Alarm
+    @SuppressLint("ScheduleExactAlarm")
+    private void setAlarmManager(Long timeInMillis, String message, int color, String notificationChannelId) {
+        NotificationScheduler.scheduleNotification(AddNoteActivity.this, timeInMillis, message, color, notificationChannelId);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+    }
 }
